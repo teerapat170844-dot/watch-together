@@ -1,805 +1,266 @@
+# Minimal UI สำหรับ Watch Together
+
+เอาโค้ดส่วนนี้ไปแทนใน `public/index.html`
+
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Watch Together</title>
 
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#060b14">
-  <meta name="description" content="ดู YouTube พร้อมกันแบบ real-time กับเพื่อน">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Watch Together">
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-  <link rel="icon" type="image/png" href="/icons/favicon-64.png">
-
   <script src="/socket.io/socket.io.js"></script>
-  <script src="https://www.youtube.com/iframe_api"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    :root {
-      --bg: #060b14;
-      --surface: rgba(255,255,255,0.04);
-      --border: rgba(255,255,255,0.09);
-      --accent: #3b82f6;
-      --accent-glow: rgba(59,130,246,0.35);
-      --accent2: #f43f5e;
-      --gold: #fbbf24;
-      --gold-glow: rgba(251,191,36,0.3);
-      --purple: #a855f7;
-      --purple-glow: rgba(168,85,247,0.35);
-      --text: #e2e8f0;
-      --muted: #64748b;
-      --green: #22c55e;
-      --green-glow: rgba(34,197,94,0.3);
-      --radius: 14px;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
     }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      /* กัน pull-to-refresh บนมือถือ + overscroll glow */
-      overscroll-behavior: none;
-      -webkit-overflow-scrolling: touch;
-    }
+
     body {
-      background: var(--bg); color: var(--text);
-      font-family: 'Sarabun', sans-serif;
-      min-height: 100vh; overflow-x: hidden;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
+      background: #0f0f0f;
+      color: white;
+      display: flex;
+      justify-content: center;
+      padding: 30px;
     }
 
-    .bg-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      background: radial-gradient(ellipse 80% 50% at 20% -10%, rgba(59,130,246,0.13) 0%, transparent 60%),
-                  radial-gradient(ellipse 60% 40% at 80% 110%, rgba(244,63,94,0.10) 0%, transparent 60%); }
-    .bg-grid { position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-      background-size: 60px 60px;
-      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black, transparent); }
-    .wrapper { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 40px 20px 60px; }
+    .container {
+      width: 100%;
+      max-width: 1000px;
+    }
 
-    .view { display: none; }
-    .view.active { display: block; animation: viewIn 0.4s ease both; }
-    @keyframes viewIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .card {
+      background: #181818;
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.25);
+    }
 
-    .header { text-align: center; margin-bottom: 40px; animation: fadeDown 0.6s ease both; }
-    .header-badge { display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.25);
-      border-radius: 999px; padding: 4px 14px; font-size: 11px; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--accent); margin-bottom: 16px; }
-    .header h1 { font-family: 'Bebas Neue', sans-serif;
-      font-size: clamp(48px,8vw,80px); letter-spacing: 3px; line-height: 1;
-      background: linear-gradient(135deg, #e2e8f0 30%, #94a3b8);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    .accent-word { -webkit-text-fill-color: var(--accent) !important; color: var(--accent); }
-    .header p { color: var(--muted); font-size: 14px; margin-top: 8px; }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 32px;
+    }
 
-    /* Room top bar */
-    .room-bar { display: flex; align-items: center; gap: 12px;
-      padding: 14px 18px; background: var(--surface);
-      border: 1px solid var(--border); border-radius: var(--radius);
-      backdrop-filter: blur(12px); margin-bottom: 16px;
-      animation: fadeDown 0.5s ease both; }
-    .room-bar .room-icon { width: 38px; height: 38px; border-radius: 10px;
-      background: linear-gradient(135deg,#2563eb,#3b82f6);
-      display: flex; align-items: center; justify-content: center; font-size: 18px;
-      flex-shrink: 0; box-shadow: 0 4px 16px var(--accent-glow); }
-    .room-bar .info { flex: 1; min-width: 0; }
-    .room-bar .name { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1.5px; color: var(--text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .room-bar .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      font-size: 12px; color: var(--muted); margin-top: 1px; }
-    .room-bar .meta .live { display: inline-flex; align-items: center; gap: 5px; color: var(--green); }
-    .room-bar .meta .live::before { content: ''; width: 6px; height: 6px; border-radius: 50%;
-      background: var(--green); box-shadow: 0 0 6px var(--green-glow); animation: pulse 2s infinite; }
-    .role-badge { display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 10px; border-radius: 999px;
-      font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; flex-shrink: 0; }
-    .role-badge.owner  { background: rgba(251,191,36,0.12); color: var(--gold); border: 1px solid rgba(251,191,36,0.35); box-shadow: 0 0 10px var(--gold-glow); }
-    .role-badge.member { background: rgba(59,130,246,0.12); color: var(--accent); border: 1px solid rgba(59,130,246,0.3); }
+    .top {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
 
-    .leave-btn { display: inline-flex; align-items: center; gap: 6px;
-      padding: 9px 14px;
-      background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.35); color: #fca5a5;
-      border-radius: 9px; font-family: 'Sarabun', sans-serif; font-weight: 600; font-size: 13px;
-      cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
-    .leave-btn:hover { background: rgba(244,63,94,0.18); color: #fecaca; transform: translateY(-1px); }
-    .leave-btn:active { transform: translateY(0); }
+    input {
+      flex: 1;
+      min-width: 180px;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      outline: none;
+      background: #242424;
+      color: white;
+      font-size: 15px;
+    }
 
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 28px; backdrop-filter: blur(12px); transition: border-color 0.2s; }
-    .card:hover { border-color: rgba(255,255,255,0.14); }
-    .card-title { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted);
-      margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-    .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    button {
+      padding: 14px 20px;
+      border: none;
+      border-radius: 12px;
+      background: white;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+    }
 
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-    @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+    button:hover {
+      transform: scale(1.03);
+    }
 
-    .tabs { display: flex; background: rgba(0,0,0,0.35); border: 1px solid var(--border);
-      border-radius: 11px; padding: 4px; margin-bottom: 18px; gap: 4px; }
-    .tab { flex: 1; background: transparent; border: none; color: var(--muted);
-      padding: 10px 8px; font-family: 'Sarabun', sans-serif; font-size: 13px;
-      font-weight: 600; letter-spacing: 0.5px;
-      border-radius: 8px; cursor: pointer; transition: all 0.2s;
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-    .tab:hover { color: var(--text); }
-    .tab.active.join { background: linear-gradient(135deg,#2563eb,#3b82f6); color: white; box-shadow: 0 2px 12px var(--accent-glow); }
-    .tab.active.create { background: linear-gradient(135deg,#9333ea,#a855f7); color: white; box-shadow: 0 2px 12px var(--purple-glow); }
+    iframe {
+      width: 100%;
+      height: 540px;
+      border: none;
+      border-radius: 18px;
+      margin-top: 20px;
+      background: black;
+    }
 
-    .field { display: flex; flex-direction: column; gap: 7px; }
-    label { font-size: 12px; font-weight: 600; letter-spacing: 0.5px; color: var(--muted); }
-    input[type=text], input[type=password] {
-      background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 9px;
-      padding: 12px 14px; color: var(--text);
-      font-family: 'Sarabun', sans-serif; font-size: 15px;
-      outline: none; transition: border-color 0.2s, box-shadow 0.2s; width: 100%; }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
-    input::placeholder { color: #475569; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 20px;
+    }
 
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-      padding: 13px 24px; border-radius: 9px; border: none;
-      font-family: 'Sarabun', sans-serif; font-size: 15px; font-weight: 600;
-      cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
-    .btn::after { content: ''; position: absolute; inset: 0; background: white; opacity: 0; transition: opacity 0.15s; }
-    .btn:hover::after { opacity: 0.07; }
-    .btn:active { transform: scale(0.97); }
-    .btn-primary  { background: linear-gradient(135deg,#2563eb,#3b82f6); color: white; box-shadow: 0 4px 20px var(--accent-glow); width: 100%; margin-top: 16px; }
-    .btn-purple   { background: linear-gradient(135deg,#9333ea,#a855f7); color: white; box-shadow: 0 4px 20px var(--purple-glow); width: 100%; margin-top: 16px; }
-    .btn-green    { background: linear-gradient(135deg,#16a34a,#22c55e); color: white; box-shadow: 0 4px 20px var(--green-glow); padding: 13px 20px; border-radius: 9px; white-space: nowrap; }
-    .btn-danger   { background: linear-gradient(135deg,#dc2626,#ef4444); color: white; }
-    .btn-secondary { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--border); }
+    .chat-box {
+      height: 350px;
+      overflow-y: auto;
+      background: #111;
+      border-radius: 14px;
+      padding: 15px;
+      margin-bottom: 10px;
+    }
 
-    .status-row { display: flex; align-items: center; gap: 8px; margin-top: 16px;
-      padding: 10px 14px; background: rgba(0,0,0,0.2); border-radius: 8px;
-      border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-    .dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green-glow); animation: pulse 2s infinite; }
-    .dot.error     { background: var(--accent2); }
-    .hint { font-size: 11.5px; color: var(--muted); margin-top: 10px; line-height: 1.6; padding-left: 2px; }
-    .hint b { color: var(--text); }
+    .msg {
+      margin-bottom: 12px;
+      background: #1e1e1e;
+      padding: 10px;
+      border-radius: 10px;
+    }
 
-    .video-input-row { display: flex; gap: 10px; margin-bottom: 20px; }
-    .video-input-row input { flex: 1; }
-    .player-wrap { position: relative; width: 100%; padding-top: 56.25%;
-      background: rgba(0,0,0,0.4); border-radius: 10px; overflow: hidden;
-      border: 1px solid var(--border); }
-    #placeholder { position: absolute; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 13px; }
-    #placeholder .icon { font-size: 40px; opacity: 0.3; }
-    #yt-player { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: none; border: none; }
+    .users {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
 
-    #syncBar { display: none; margin-top: 14px; padding: 10px 18px;
-      background: rgba(0,0,0,0.25); border: 1px solid var(--border);
-      border-radius: 8px; font-size: 13px; color: var(--muted); align-items: center; gap: 10px; }
-    #syncBar.show { display: flex; }
-    #syncState { font-weight: 600; color: var(--text); }
-    #syncTime  { margin-left: auto; font-family: monospace; font-size: 12px; opacity: 0.7; }
+    .user {
+      background: #222;
+      padding: 12px;
+      border-radius: 12px;
+    }
 
-    .member-list { display: flex; flex-direction: column; gap: 8px; }
-    .member-item { display: flex; align-items: center; gap: 12px;
-      padding: 10px 12px; background: rgba(0,0,0,0.25);
-      border: 1px solid var(--border); border-radius: 10px;
-      transition: all 0.2s; animation: slideInRight 0.3s ease both; }
-    .member-item:hover { border-color: rgba(255,255,255,0.18); transform: translateX(2px); }
-    .member-item.is-me { border-color: rgba(59,130,246,0.4); background: rgba(59,130,246,0.06); }
-    .member-item.is-owner { border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.05); }
-    .member-avatar { width: 36px; height: 36px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 15px; color: white; flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-    .member-info { flex: 1; min-width: 0; }
-    .member-name { font-size: 14px; font-weight: 600; color: var(--text);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .member-status { font-size: 11px; color: var(--muted); margin-top: 1px; }
-    .member-tags { display: flex; gap: 6px; flex-shrink: 0; }
-    .member-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-      padding: 3px 8px; border-radius: 999px; text-transform: uppercase; }
-    .member-tag.owner { background: rgba(251,191,36,0.15); color: var(--gold); border: 1px solid rgba(251,191,36,0.3); }
-    .member-tag.me    { background: rgba(59,130,246,0.15); color: var(--accent); border: 1px solid rgba(59,130,246,0.3); }
+    @media(max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
 
-    .toast-wrap { position: fixed; top: 24px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 9999; }
-    .toast { display: flex; align-items: center; gap: 10px;
-      background: rgba(15,23,42,0.92); border: 1px solid var(--border); border-radius: 10px;
-      padding: 12px 18px; font-size: 14px;
-      backdrop-filter: blur(20px); box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-      animation: slideIn 0.3s ease; min-width: 240px; }
-    .toast.error   { border-color: rgba(244,63,94,0.4); }
-    .toast.success { border-color: rgba(34,197,94,0.4); }
-
-    .modal-overlay { position: fixed; inset: 0; z-index: 10000;
-      background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
-      display: flex; align-items: center; justify-content: center;
-      animation: fadeIn 0.2s ease; padding: 20px; }
-    .modal { background: linear-gradient(180deg, rgba(30,41,59,0.95), rgba(15,23,42,0.95));
-      border: 1px solid var(--border); border-radius: 16px; padding: 32px;
-      max-width: 400px; width: 100%;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-      animation: scaleIn 0.25s cubic-bezier(.4,0,.2,1); text-align: center; }
-    .modal-icon { font-size: 48px; margin-bottom: 12px; }
-    .modal h3 { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 1.5px; margin-bottom: 8px; }
-    .modal p { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
-    .modal-actions { display: flex; gap: 10px; }
-    .modal-actions .btn { flex: 1; padding: 12px; }
-
-    .install-bar { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom));
-      left: 50%; transform: translateX(-50%);
-      display: none; align-items: center; gap: 12px;
-      padding: 12px 16px 12px 14px;
-      background: linear-gradient(135deg, rgba(59,130,246,0.95), rgba(37,99,235,0.95));
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 999px; box-shadow: 0 8px 32px rgba(59,130,246,0.4);
-      backdrop-filter: blur(20px);
-      z-index: 9998; max-width: calc(100vw - 32px); }
-    .install-bar.show { display: flex; animation: installSlideUp 0.5s cubic-bezier(.22,1,.36,1); }
-    .install-bar .icon-box { width: 32px; height: 32px; border-radius: 8px;
-      background: rgba(255,255,255,0.18);
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .install-bar .text { font-size: 13px; color: white; font-weight: 600;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .install-bar .text small { display: block; font-size: 11px; font-weight: 400; opacity: 0.85; }
-    .install-bar button { background: white; color: #2563eb; border: none;
-      padding: 7px 14px; border-radius: 999px;
-      font-family: 'Sarabun', sans-serif; font-weight: 700; font-size: 12px;
-      cursor: pointer; transition: transform 0.15s; flex-shrink: 0; }
-    .install-bar button:hover { transform: scale(1.05); }
-    .install-bar .close { background: transparent; color: white; width: 24px; height: 24px; padding: 0; font-size: 16px; opacity: 0.7; }
-
-    @keyframes fadeDown    { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes slideIn     { from{opacity:0;transform:translateX(30px)}  to{opacity:1;transform:translateX(0)} }
-    @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
-    @keyframes pulse       { 0%,100%{opacity:1} 50%{opacity:.4} }
-    @keyframes fadeIn      { from{opacity:0} to{opacity:1} }
-    @keyframes scaleIn     { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:scale(1)} }
-    @keyframes installSlideUp { from{opacity:0;transform:translate(-50%,20px)} to{opacity:1;transform:translate(-50%,0)} }
+      iframe {
+        height: 250px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="bg-layer"></div>
-  <div class="bg-grid"></div>
-  <div class="toast-wrap" id="toastWrap"></div>
 
-  <div class="install-bar" id="installBar">
-    <div class="icon-box">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+<div class="container">
+
+  <h1>🎬 Watch Together</h1>
+
+  <div class="card">
+    <div class="top">
+      <input id="name" placeholder="ชื่อ">
+      <input id="room" placeholder="รหัสห้อง">
+      <button onclick="joinRoom()">เข้าห้อง</button>
     </div>
-    <div class="text">ติดตั้งเป็นแอป<small>เปิดเร็วขึ้น เปิดเต็มจอ</small></div>
-    <button id="installBtn">ติดตั้ง</button>
-    <button class="close" id="installClose" aria-label="ปิด">×</button>
+
+    <div class="top" style="margin-top:15px;">
+      <input id="videoUrl" placeholder="วางลิงก์ YouTube">
+      <button onclick="setVideo()">เปิดวิดีโอ</button>
+    </div>
+
+    <iframe id="player" allow="autoplay"></iframe>
   </div>
 
-  <div class="wrapper">
+  <div class="grid">
 
-    <!-- LOBBY VIEW -->
-    <div class="view active" id="lobbyView">
-      <div class="header">
-        <div class="header-badge">🎬 Live Sync</div>
-        <h1>Watch<span class="accent-word">Together</span></h1>
-        <p>สร้างห้อง · เชิญเพื่อน · ดูพร้อมกัน sync ทุก 2 วินาที</p>
-      </div>
+    <div class="card">
+      <h2 style="margin-bottom:15px;">💬 แชท</h2>
 
-      <div class="grid-2">
-        <div class="card">
-          <div class="tabs">
-            <button class="tab active join" data-mode="join" onclick="switchMode('join')">
-              <span>🚪</span> เข้าห้อง
-            </button>
-            <button class="tab create" data-mode="create" onclick="switchMode('create')">
-              <span>✨</span> สร้างห้อง
-            </button>
-          </div>
+      <div class="chat-box" id="chat"></div>
 
-          <div class="card-title" id="formTitle">เข้าร่วมห้องที่มีอยู่</div>
-
-          <div style="display:flex;flex-direction:column;gap:14px;">
-            <div class="field">
-              <label>ชื่อผู้ใช้</label>
-              <input type="text" id="name" placeholder="ระบุชื่อของคุณ" autocomplete="off">
-            </div>
-            <div class="field">
-              <label id="roomLabelText">รหัสห้อง</label>
-              <input type="text" id="room" placeholder="เช่น movie-night-01" autocomplete="off">
-            </div>
-            <div class="field">
-              <label id="passLabelText">รหัสผ่าน</label>
-              <input type="password" id="pass" placeholder="รหัสผ่านห้อง" autocomplete="off">
-            </div>
-          </div>
-
-          <button class="btn btn-primary" id="submitBtn" onclick="submitForm()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            <span id="submitBtnText">เข้าห้อง</span>
-          </button>
-
-          <div class="hint" id="formHint">
-            🚪 เข้าร่วมห้องที่เพื่อนสร้างไว้ — ดูพร้อมกัน เปลี่ยนวิดีโอได้อิสระ
-          </div>
-
-          <div class="status-row">
-            <div class="dot" id="statusDot"></div>
-            <span id="statusText">ยังไม่ได้เชื่อมต่อ</span>
-          </div>
-        </div>
-
-        <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;text-align:center;">
-          <div style="font-size:62px;line-height:1">🍿</div>
-          <div>
-            <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px">เริ่มต้นใช้งาน</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">เลือกสร้างหรือเข้าห้อง</div>
-          </div>
-          <div style="width:100%;height:1px;background:var(--border)"></div>
-          <div style="font-size:11.5px;color:var(--muted);line-height:1.9;text-align:left">
-            ✨ <b style="color:var(--purple)">สร้างห้อง</b> = เป็นเจ้าของ<br>
-            🚪 <b style="color:var(--accent)">เข้าห้อง</b> = เป็นผู้ร่วม<br>
-            🎮 ทุกคนคุม play/pause/seek ได้<br>
-            🎬 ทุกคนเปลี่ยนวิดีโอได้อิสระ
-          </div>
-        </div>
+      <div class="top">
+        <input id="msg" placeholder="พิมพ์ข้อความ...">
+        <button onclick="sendMsg()">ส่ง</button>
       </div>
     </div>
 
-    <!-- ROOM VIEW -->
-    <div class="view" id="roomView">
-      <div class="room-bar">
-        <div class="room-icon">🎬</div>
-        <div class="info">
-          <div class="name" id="roomBarName">—</div>
-          <div class="meta">
-            <span class="live">เชื่อมต่อแล้ว</span>
-            <span>·</span>
-            <span id="roomBarCount">0 คน</span>
-          </div>
-        </div>
-        <span class="role-badge member" id="roomBarRole">🎬 ผู้ร่วม</span>
-        <button class="leave-btn" onclick="confirmLeave()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          ออกห้อง
-        </button>
-      </div>
+    <div class="card">
+      <h2 style="margin-bottom:15px;">👥 คนในห้อง</h2>
 
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-title">เปิดวิดีโอ</div>
-        <div class="video-input-row">
-          <input type="text" id="videoUrl" placeholder="วางลิงก์ YouTube · ทุกคนในห้องเห็นพร้อมกัน">
-          <button class="btn btn-green" onclick="setVideo()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>
-            เปิด
-          </button>
-        </div>
-
-        <div class="player-wrap">
-          <div id="placeholder">
-            <div class="icon">🎬</div>
-            <span>วางลิงก์ YouTube แล้วกด เปิด</span>
-          </div>
-          <div id="yt-player"></div>
-        </div>
-
-        <div id="syncBar">
-          <span id="syncIcon">⏸</span>
-          <span id="syncState">รอการเล่น</span>
-          <span id="syncTime"></span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">
-          <span>สมาชิกในห้อง</span>
-          <span style="background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.3);padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.5px;margin-left:auto;">
-            <span id="memberCount">0</span> คน
-          </span>
-        </div>
-        <div class="member-list" id="memberList"></div>
-      </div>
+      <div class="users" id="users"></div>
     </div>
 
   </div>
 
-  <script>
-    const socket = io();
-    let roomId = "", myName = "", joinedOnce = false;
-    let player = null;
-    let isSyncing = false;
-    let isOwner = false;
-    let mode = "join";
-    let _prevUserIds = new Set();
+</div>
 
-    function showToast(msg, type = "info") {
-      const icons = { info:"ℹ️", error:"❌", success:"✅" };
-      const t = document.createElement("div");
-      t.className = `toast ${type}`;
-      t.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
-      document.getElementById("toastWrap").appendChild(t);
-      setTimeout(() => { t.style.cssText += "opacity:0;transition:opacity .3s"; setTimeout(() => t.remove(), 350); }, 3000);
-    }
-    function setStatus(txt, cls) {
-      document.getElementById("statusText").textContent = txt;
-      document.getElementById("statusDot").className = "dot " + (cls || "");
-    }
-    function fmtTime(s) { s = Math.floor(s||0); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`; }
-    function setSyncBar(icon, label, time) {
-      document.getElementById("syncBar").classList.add("show");
-      document.getElementById("syncIcon").textContent  = icon;
-      document.getElementById("syncState").textContent = label;
-      document.getElementById("syncTime").textContent  = (time != null) ? fmtTime(time) : "";
-    }
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
-    }
+<script>
+const socket = io();
 
-    function showLobby() {
-      document.getElementById("lobbyView").classList.add("active");
-      document.getElementById("roomView").classList.remove("active");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-    function showRoom() {
-      document.getElementById("roomView").classList.add("active");
-      document.getElementById("lobbyView").classList.remove("active");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+let roomId = "";
+let name = "";
 
-    function updateRoomBar(userCount) {
-      document.getElementById("roomBarName").textContent  = `🏠 ${roomId}`;
-      document.getElementById("roomBarCount").textContent = `${userCount} คน`;
-      const badge = document.getElementById("roomBarRole");
-      if (isOwner) { badge.className = "role-badge owner";  badge.textContent = "👑 เจ้าของห้อง"; }
-      else         { badge.className = "role-badge member"; badge.textContent = "🎬 ผู้ร่วม"; }
-    }
+function joinRoom() {
+  roomId = document.getElementById("room").value;
+  name = document.getElementById("name").value;
 
-    function switchMode(newMode) {
-      mode = newMode;
-      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.mode === newMode));
-      const btn = document.getElementById("submitBtn");
-      const btnText = document.getElementById("submitBtnText");
-      const title = document.getElementById("formTitle");
-      const hint  = document.getElementById("formHint");
-      const roomLbl = document.getElementById("roomLabelText");
-      const passLbl = document.getElementById("passLabelText");
-      const roomInp = document.getElementById("room");
-      const passInp = document.getElementById("pass");
+  socket.emit("join-room", {
+    roomId,
+    name
+  });
+}
 
-      if (newMode === "create") {
-        btn.className = "btn btn-purple";
-        btnText.textContent = "สร้างและเข้าห้อง";
-        title.textContent   = "สร้างห้องใหม่";
-        hint.innerHTML      = "✨ คุณจะกลายเป็น <b style='color:var(--gold)'>เจ้าของห้อง</b> และเข้าห้องทันที";
-        roomLbl.textContent = "ตั้งรหัสห้องใหม่";
-        passLbl.textContent = "ตั้งรหัสผ่าน";
-        roomInp.placeholder = "เช่น movie-night-01";
-        passInp.placeholder = "ตั้งรหัสผ่านสำหรับห้องนี้";
-      } else {
-        btn.className = "btn btn-primary";
-        btnText.textContent = "เข้าห้อง";
-        title.textContent   = "เข้าร่วมห้องที่มีอยู่";
-        hint.innerHTML      = "🚪 เข้าร่วมห้องที่เพื่อนสร้างไว้ — ดูพร้อมกัน เปลี่ยนวิดีโอได้อิสระ";
-        roomLbl.textContent = "รหัสห้อง";
-        passLbl.textContent = "รหัสผ่าน";
-        roomInp.placeholder = "เช่น movie-night-01";
-        passInp.placeholder = "รหัสผ่านห้อง";
-      }
-    }
+function setVideo() {
+  const url = document.getElementById("videoUrl").value;
 
-    function submitForm() {
-      roomId = document.getElementById("room").value.trim();
-      myName = document.getElementById("name").value.trim();
-      const pw = document.getElementById("pass").value;
-      if (!myName || !roomId) { showToast("กรุณากรอกชื่อและรหัสห้อง", "error"); return; }
-      joinedOnce = false;
-      setStatus(mode === "create" ? "กำลังสร้างห้อง..." : "กำลังเข้าห้อง...", "");
-      if (mode === "create") socket.emit("create-room", { roomId, name: myName, password: pw });
-      else                    socket.emit("join-room",   { roomId, name: myName, password: pw });
-    }
+  let videoId = "";
 
-    function confirmLeave() {
-      document.querySelector(".modal-overlay")?.remove();
-      const overlay = document.createElement("div");
-      overlay.className = "modal-overlay";
-      overlay.innerHTML = `
-        <div class="modal">
-          <div class="modal-icon">👋</div>
-          <h3>ออกจากห้อง?</h3>
-          <p>คุณจะออกจากห้อง "${escapeHtml(roomId)}" และกลับไปหน้าเข้าห้อง</p>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" data-act="cancel">ยกเลิก</button>
-            <button class="btn btn-danger" data-act="leave">ออกห้อง</button>
-          </div>
-        </div>`;
-      document.body.appendChild(overlay);
-      overlay.querySelector('[data-act="cancel"]').onclick = () => overlay.remove();
-      overlay.querySelector('[data-act="leave"]').onclick  = () => {
-        socket.emit("leave-room", { roomId });
-        overlay.remove();
-      };
-    }
+  if (url.includes("watch?v=")) {
+    videoId = url.split("watch?v=")[1].split("&")[0];
+  } else if (url.includes("youtu.be/")) {
+    videoId = url.split("youtu.be/")[1];
+  }
 
-    function resetToLobby() {
-      try { player?.stopVideo?.(); } catch (e) {}
-      try { player?.destroy?.(); } catch (e) {}
-      player = null;
-      document.getElementById("yt-player").style.display = "none";
-      document.getElementById("yt-player").innerHTML = "";
-      document.getElementById("placeholder").style.display = "flex";
-      document.getElementById("syncBar").classList.remove("show");
-      document.getElementById("videoUrl").value = "";
+  const embed = `https://www.youtube.com/embed/${videoId}`;
 
-      joinedOnce = false;
-      isOwner = false;
-      _prevUserIds = new Set();
-      window._lastUsers = [];
+  document.getElementById("player").src = embed;
 
-      setStatus("ยังไม่ได้เชื่อมต่อ", "");
-      showLobby();
-      showToast("ออกจากห้องเรียบร้อย 👋", "info");
-    }
+  socket.emit("video-update", {
+    roomId,
+    video: embed
+  });
+}
 
-    socket.on("left-room", () => resetToLobby());
+socket.on("video-update", (video) => {
+  document.getElementById("player").src = video;
+});
 
-    window.onYouTubeIframeAPIReady = function() {};
+socket.on("room-data", (data) => {
+  document.getElementById("users").innerHTML = data.users
+    .map(user => `<div class="user">${user.name}</div>`)
+    .join("");
+});
 
-    function loadYTPlayer(videoId) {
-      document.getElementById("placeholder").style.display = "none";
-      document.getElementById("yt-player").style.display   = "block";
-      if (player && player.loadVideoById) { player.loadVideoById(videoId); return; }
-      player = new YT.Player("yt-player", {
-        videoId,
-        playerVars: { autoplay:1, rel:0, modestbranding:1 },
-        events: {
-          onReady: () => setSyncBar("⏳", "โหลดวิดีโอสำเร็จ"),
-          onStateChange: onPlayerStateChange
-        }
-      });
-    }
+function sendMsg() {
+  const message = document.getElementById("msg").value;
 
-    function onPlayerStateChange(e) {
-      if (isSyncing) return;
-      const t = player.getCurrentTime();
-      if (e.data === YT.PlayerState.PLAYING)        { setSyncBar("▶","กำลังเล่น",t);     socket.emit("video-control", { roomId, action:"play",  time:t }); }
-      else if (e.data === YT.PlayerState.PAUSED)    { setSyncBar("⏸","หยุดชั่วคราว",t);  socket.emit("video-control", { roomId, action:"pause", time:t }); }
-      else if (e.data === YT.PlayerState.BUFFERING) { setSyncBar("⏳","บัฟเฟอร์...",t); }
-      else if (e.data === YT.PlayerState.ENDED)     { setSyncBar("⏹","จบวิดีโอ"); }
-    }
+  socket.emit("chat-message", {
+    roomId,
+    name,
+    message
+  });
 
-    let _prev = 0;
-    setInterval(() => {
-      if (!player || typeof player.getCurrentTime !== "function") return;
-      const t = player.getCurrentTime();
-      if (!isSyncing && Math.abs(t - _prev) > 4) {
-        socket.emit("video-control", { roomId, action: "seek", time: t });
-        setSyncBar("⏩", "กรอวิดีโอ", t);
-      }
-      _prev = t;
-    }, 1500);
+  document.getElementById("msg").value = "";
+}
 
-    setInterval(() => {
-      if (!isOwner || !player || typeof player.getCurrentTime !== "function") return;
-      const time = player.getCurrentTime();
-      const isPlaying = player.getPlayerState() === YT.PlayerState.PLAYING;
-      socket.emit("time-sync", { roomId, time, isPlaying });
-    }, 2000);
+socket.on("chat-message", (data) => {
+  const chat = document.getElementById("chat");
 
-    socket.on("time-sync", ({ time, isPlaying }) => {
-      if (isOwner || !player || typeof player.getCurrentTime !== "function") return;
-      const myTime  = player.getCurrentTime();
-      const drift   = Math.abs(myTime - time);
-      const myState = player.getPlayerState();
-      if (drift > 1.5) { isSyncing = true; player.seekTo(time, true); setTimeout(() => isSyncing = false, 500); }
-      if (isPlaying && myState !== YT.PlayerState.PLAYING && myState !== YT.PlayerState.BUFFERING) {
-        isSyncing = true; player.playVideo(); setTimeout(() => isSyncing = false, 500);
-      } else if (!isPlaying && myState === YT.PlayerState.PLAYING) {
-        isSyncing = true; player.pauseVideo(); setTimeout(() => isSyncing = false, 500);
-      }
-    });
+  chat.innerHTML += `
+    <div class="msg">
+      <b>${data.name}</b><br>
+      ${data.message}
+    </div>
+  `;
 
-    function getVideoId(url) {
-      if (url.includes("watch?v=")) return url.split("watch?v=")[1].split("&")[0];
-      if (url.includes("youtu.be/")) return url.split("youtu.be/")[1].split("?")[0];
-      return null;
-    }
+  chat.scrollTop = chat.scrollHeight;
+});
+</script>
 
-    function setVideo() {
-      if (!joinedOnce) { showToast("ต้องเข้าห้องก่อน", "error"); return; }
-      const url = document.getElementById("videoUrl").value.trim();
-      const vid = getVideoId(url);
-      if (!vid) { showToast("ลิงก์ไม่ถูกต้อง กรุณาใช้ลิงก์ YouTube", "error"); return; }
-      loadYTPlayer(vid);
-      socket.emit("video-update", { roomId, video: vid });
-      showToast("เปิดวิดีโอและส่งให้ทุกคนแล้ว 🎬", "success");
-    }
-
-    socket.on("video-update", (vid) => {
-      loadYTPlayer(vid);
-      showToast("มีคนเปลี่ยนวิดีโอใหม่ 🎬", "info");
-    });
-
-    socket.on("video-control", ({ action, time }) => {
-      if (!player) return;
-      isSyncing = true;
-      player.seekTo(time, true);
-      if (action === "play")       { player.playVideo();  setSyncBar("▶", "เล่นพร้อมกัน", time); }
-      else if (action === "pause") { player.pauseVideo(); setSyncBar("⏸", "หยุดพร้อมกัน", time); }
-      else if (action === "seek")  {                       setSyncBar("⏩", "กรอพร้อมกัน", time); }
-      setTimeout(() => isSyncing = false, 700);
-    });
-
-    const AVATAR_COLORS = [
-      "linear-gradient(135deg,#ef4444,#f97316)",
-      "linear-gradient(135deg,#3b82f6,#8b5cf6)",
-      "linear-gradient(135deg,#10b981,#14b8a6)",
-      "linear-gradient(135deg,#f59e0b,#ef4444)",
-      "linear-gradient(135deg,#8b5cf6,#ec4899)",
-      "linear-gradient(135deg,#06b6d4,#3b82f6)",
-      "linear-gradient(135deg,#84cc16,#22c55e)",
-      "linear-gradient(135deg,#f43f5e,#a855f7)"
-    ];
-    function colorFromName(name) {
-      let h = 0;
-      for (let i = 0; i < name.length; i++) h = ((h << 5) - h) + name.charCodeAt(i);
-      return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-    }
-
-    function renderMembers(users, ownerId) {
-      const list = document.getElementById("memberList");
-      const cnt  = document.getElementById("memberCount");
-      cnt.textContent = users.length;
-
-      const sorted = [...users].sort((a, b) => {
-        if (a.id === ownerId) return -1;
-        if (b.id === ownerId) return 1;
-        if (a.id === socket.id) return -1;
-        if (b.id === socket.id) return 1;
-        return 0;
-      });
-
-      list.innerHTML = sorted.map(u => {
-        const isOwn = u.id === ownerId;
-        const isMe  = u.id === socket.id;
-        const initial = (u.name[0] || "?").toUpperCase();
-        const color = colorFromName(u.name);
-        const tags = [];
-        if (isOwn) tags.push('<span class="member-tag owner">👑 เจ้าของ</span>');
-        if (isMe)  tags.push('<span class="member-tag me">คุณ</span>');
-        const cls = "member-item" + (isOwn ? " is-owner" : "") + (isMe ? " is-me" : "");
-        const status = isOwn ? "ผู้สร้างห้อง · time-sync" : "ผู้ร่วมห้อง";
-        return `
-          <div class="${cls}">
-            <div class="member-avatar" style="background:${color}">${escapeHtml(initial)}</div>
-            <div class="member-info">
-              <div class="member-name">${escapeHtml(u.name)}</div>
-              <div class="member-status">${status}</div>
-            </div>
-            <div class="member-tags">${tags.join("")}</div>
-          </div>`;
-      }).join("");
-    }
-
-    socket.on("room-data", (data) => {
-      if (!data || !data.users) return;
-      const me = data.users.find(u => u.id === socket.id);
-      if (!me) return;
-
-      const wasOwner = isOwner;
-      isOwner = (data.owner === socket.id);
-      if (!wasOwner && isOwner && joinedOnce) showToast("คุณกลายเป็นเจ้าของห้องแล้ว 👑", "success");
-
-      updateRoomBar(data.users.length);
-      renderMembers(data.users, data.owner);
-
-      if (joinedOnce) {
-        const currentIds = new Set(data.users.map(u => u.id));
-        for (const u of data.users) {
-          if (!_prevUserIds.has(u.id) && u.id !== socket.id) {
-            showToast(`${u.name} เข้าร่วมห้อง 👋`, "info");
-          }
-        }
-        for (const id of _prevUserIds) {
-          if (!currentIds.has(id) && id !== socket.id) {
-            const left = (window._lastUsers || []).find(u => u.id === id);
-            if (left) showToast(`${left.name} ออกจากห้องแล้ว`, "info");
-          }
-        }
-        _prevUserIds = currentIds;
-      } else {
-        _prevUserIds = new Set(data.users.map(u => u.id));
-      }
-      window._lastUsers = data.users;
-
-      if (!joinedOnce) {
-        joinedOnce = true;
-        const verb = (mode === "create") ? "สร้าง" : "เข้าร่วม";
-        showToast(`${verb}ห้อง "${roomId}" สำเร็จ ✨`, "success");
-        showRoom();
-      }
-    });
-
-    socket.on("wrong-password", () => { showToast("รหัสผ่านผิด ลองอีกครั้ง", "error");           setStatus("เข้าร่วมไม่สำเร็จ","error"); joinedOnce=false; });
-    socket.on("room-not-found", () => { showToast("ไม่พบห้องนี้ — ลองสร้างห้องแทนไหม?", "error"); setStatus("ไม่พบห้อง","error");           joinedOnce=false; });
-    socket.on("room-exists",    () => { showToast("รหัสห้องนี้มีคนใช้แล้ว ตั้งใหม่อีกที", "error");setStatus("สร้างห้องไม่สำเร็จ","error");   joinedOnce=false; });
-
-    socket.on("disconnect", () => setStatus("การเชื่อมต่อขาด — กำลัง reconnect...", "error"));
-
-    // PWA
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/service-worker.js")
-          .then(reg => console.log("SW registered:", reg.scope))
-          .catch(err => console.log("SW failed:", err));
-      });
-    }
-
-    let deferredPrompt = null;
-    const installBar   = document.getElementById("installBar");
-    const installBtn   = document.getElementById("installBtn");
-    const installClose = document.getElementById("installClose");
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-    const installDismissed = localStorage.getItem("installDismissed") === "1";
-
-    window.addEventListener("beforeinstallprompt", (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      if (!isStandalone && !installDismissed) {
-        setTimeout(() => installBar.classList.add("show"), 1500);
-      }
-    });
-    installBtn.addEventListener("click", async () => {
-      if (!deferredPrompt) return;
-      installBar.classList.remove("show");
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") showToast("ติดตั้งเรียบร้อย 🎉", "success");
-      deferredPrompt = null;
-    });
-    installClose.addEventListener("click", () => {
-      installBar.classList.remove("show");
-      try { localStorage.setItem("installDismissed", "1"); } catch (e) {}
-    });
-    window.addEventListener("appinstalled", () => {
-      installBar.classList.remove("show");
-      showToast("แอปติดตั้งสำเร็จ 🎉", "success");
-    });
-
-    // ═══════════════════════════════════════════════
-    //  กัน refresh / ปิด tab ตอนอยู่ในห้อง
-    // ═══════════════════════════════════════════════
-
-    // บล็อก F5, Ctrl+R, Ctrl+Shift+R (เฉพาะตอนอยู่ในห้อง)
-    window.addEventListener("keydown", (e) => {
-      if (!joinedOnce) return;
-      const isRefresh =
-        e.key === "F5" ||
-        ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R"));
-      if (isRefresh) {
-        e.preventDefault();
-        showToast("กรุณากดปุ่ม 'ออกห้อง' แทนการรีเฟรช 🚪", "info");
-      }
-    });
-
-    // เตือนก่อนปิด/refresh ผ่านปุ่ม browser
-    window.addEventListener("beforeunload", (e) => {
-      if (joinedOnce) {
-        e.preventDefault();
-        e.returnValue = "คุณกำลังอยู่ในห้อง — แน่ใจว่าจะออก?";
-        return e.returnValue;
-      }
-    });
-
-    // กัน pull-to-refresh บนมือถือ (fallback ถ้า CSS overscroll-behavior ไม่ทำงาน)
-    let _touchStartY = 0;
-    window.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 1) _touchStartY = e.touches[0].clientY;
-    }, { passive: true });
-
-    window.addEventListener("touchmove", (e) => {
-      if (!joinedOnce) return;
-      if (e.touches.length !== 1) return;
-      const dy = e.touches[0].clientY - _touchStartY;
-      // ลากลงจากบนสุด → กัน pull-to-refresh
-      if (window.scrollY <= 0 && dy > 0) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-  </script>
 </body>
 </html>
+```
+
+หลังแก้เสร็จ:
+
+```bash
+git add .
+git commit -m "minimal ui"
+git push
+```
+
+แล้วรอ Render deploy อัตโนมัติประมาณ 1-2 นาที
