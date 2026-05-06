@@ -38,6 +38,11 @@
       --radius: 14px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      /* กัน pull-to-refresh บนมือถือ + overscroll glow */
+      overscroll-behavior: none;
+      -webkit-overflow-scrolling: touch;
+    }
     body {
       background: var(--bg); color: var(--text);
       font-family: 'Sarabun', sans-serif;
@@ -779,6 +784,22 @@
         return e.returnValue;
       }
     });
+
+    // กัน pull-to-refresh บนมือถือ (fallback ถ้า CSS overscroll-behavior ไม่ทำงาน)
+    let _touchStartY = 0;
+    window.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) _touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    window.addEventListener("touchmove", (e) => {
+      if (!joinedOnce) return;
+      if (e.touches.length !== 1) return;
+      const dy = e.touches[0].clientY - _touchStartY;
+      // ลากลงจากบนสุด → กัน pull-to-refresh
+      if (window.scrollY <= 0 && dy > 0) {
+        e.preventDefault();
+      }
+    }, { passive: false });
   </script>
 </body>
 </html>
