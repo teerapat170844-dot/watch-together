@@ -754,6 +754,31 @@
       installBar.classList.remove("show");
       showToast("แอปติดตั้งสำเร็จ 🎉", "success");
     });
+
+    // ═══════════════════════════════════════════════
+    //  กัน refresh / ปิด tab ตอนอยู่ในห้อง
+    // ═══════════════════════════════════════════════
+
+    // บล็อก F5, Ctrl+R, Ctrl+Shift+R (เฉพาะตอนอยู่ในห้อง)
+    window.addEventListener("keydown", (e) => {
+      if (!joinedOnce) return;
+      const isRefresh =
+        e.key === "F5" ||
+        ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R"));
+      if (isRefresh) {
+        e.preventDefault();
+        showToast("กรุณากดปุ่ม 'ออกห้อง' แทนการรีเฟรช 🚪", "info");
+      }
+    });
+
+    // เตือนก่อนปิด/refresh ผ่านปุ่ม browser
+    window.addEventListener("beforeunload", (e) => {
+      if (joinedOnce) {
+        e.preventDefault();
+        e.returnValue = "คุณกำลังอยู่ในห้อง — แน่ใจว่าจะออก?";
+        return e.returnValue;
+      }
+    });
   </script>
 </body>
 </html>
